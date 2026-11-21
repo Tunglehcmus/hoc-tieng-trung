@@ -87,7 +87,14 @@ header.top .wrap{display:flex;align-items:center;gap:10px;height:60px}
 
 /* hero: the panda greets you */
 .hero{display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center;margin-top:22px;padding:18px 22px;background:var(--paper);border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow);position:relative;overflow:hidden}
-.hero .mascot{width:136px}
+.hero .mascot{width:136px;position:relative;padding:0;border:0;background:none;cursor:pointer;border-radius:20px;transition:transform .15s}
+.hero .mascot:hover{transform:rotate(-3deg) scale(1.03)}
+.hero .mascot:active{transform:scale(.94)}
+.hero .mascot:focus-visible{outline:3px solid var(--gold);outline-offset:4px}
+.hero .mascot .tap{position:absolute;right:-2px;bottom:4px;font-size:18px;animation:tapHint 1.8s ease-in-out infinite;pointer-events:none}
+@keyframes tapHint{0%,100%{transform:none;opacity:.85}50%{transform:translate(-3px,-4px);opacity:1}}
+.hero .bubble.tipin{animation:pop .35s cubic-bezier(.3,1.6,.5,1)}
+.hero .tipn{font-size:12px;color:var(--muted);margin-top:6px;font-weight:700}
 .hero .bubble{position:relative;background:var(--accent-soft);border-radius:18px;padding:12px 16px;min-width:0}
 .hero .bubble::before{content:"";position:absolute;left:-9px;top:26px;border:9px solid transparent;border-right-color:var(--accent-soft);border-left:0}
 .hero .hi{font-family:var(--ui);font-weight:800;font-size:21px;color:var(--accent-2);line-height:1.25}
@@ -473,6 +480,76 @@ function topStats(){
 }
 
 /* ---------------- Home ---------------- */
+// Tips shown when the home panda is tapped: [Chinese heading, Vietnamese title, message]. Each shown once per round of 50.
+const TIPS = [
+  ['喝水啦！', 'Uống nước đi!', 'Não thiếu nước là quên luôn 了 với 过. Làm một ngụm 水 (shuǐ) rồi học tiếp nhé!'],
+  ['伸个懒腰', 'Vươn vai cái nào', 'Ngồi lâu lưng còng như dấu “？” rồi. Đứng dậy vươn vai 30 giây cho thẳng thành dấu “！”.'],
+  ['眼睛休息', 'Cho mắt nghỉ chút', 'Quy tắc 20-20-20: cứ 20 phút nhìn xa 20 giây. Mắt sáng thì mới phân biệt được 己 với 已!'],
+  ['慢慢来', 'Từ từ thôi', '慢慢来，比较快 — từ từ mà lại nhanh. Hiểu chắc một câu hơn lướt qua mười câu.'],
+  ['加油！', 'Cố lên!', 'Câu sai không phải thất bại, mà là gấu đang “thu thập dữ liệu” để lần sau đúng ngay.'],
+  ['早睡早起', 'Ngủ sớm dậy sớm', 'Ngủ đủ giấc giúp não lưu từ vựng vào “ổ cứng”. Thức khuya học bù là não đem đi “xóa tạm” đó!'],
+  ['熊猫说', 'Gấu trúc bảo', 'Gấu trúc ăn tre 12 tiếng mỗi ngày mà vẫn vui. Bạn học 12 phút mỗi ngày là gấu đã tự hào lắm rồi.'],
+  ['多说多练', 'Nói nhiều, luyện nhiều', 'Đọc to câu đúng một lần: tai nghe, miệng nói, não nhớ gấp ba. Hàng xóm có nhìn thì cứ tự tin!'],
+  ['吃水果', 'Ăn trái cây nào', 'Một quả 苹果 (píngguǒ) mỗi ngày, bác sĩ đứng xa — mà từ mới thì đứng gần!'],
+  ['别着急', 'Đừng vội', '“把” với “被” ai mới học cũng rối. Rối thì uống ngụm trà, đọc lại phần phân tích là thông.'],
+  ['深呼吸', 'Hít thở sâu', 'Hít vào 4 giây, giữ 4 giây, thở ra 4 giây. Bình tĩnh thì mới thấy chỗ đặt “的” đúng.'],
+  ['学而时习之', 'Học rồi ôn', 'Khổng Tử dặn: học rồi phải ôn. Vào mục “Ôn lại câu sai” làm lại vài câu đi, Khổng Tử khen đấy.'],
+  ['动一动', 'Vận động chút', 'Đi bộ quanh nhà 5 phút rồi quay lại. Máu lên não đều, ngữ pháp tự nhiên “thông”.'],
+  ['你真棒！', 'Bạn giỏi lắm!', 'Mở web ra học đã là thắng bản thân lúc lười rồi. Gấu tặng bạn một cái ôm lông xù!'],
+  ['少喝奶茶', 'Bớt trà sữa xíu', 'Trà sữa ngon nhưng nhiều đường dễ buồn ngủ. Đổi sang 绿茶 (lǜchá) vừa tỉnh vừa đúng chất Trung Hoa.'],
+  ['坚持就是胜利', 'Kiên trì là thắng', 'Mỗi ngày 5 câu, một năm hơn 1800 câu. Tính nhẩm thôi đã thấy mình siêu rồi!'],
+  ['笑一笑', 'Cười một cái', 'Cười giúp giảm căng thẳng. Thử nói “哈哈哈” thật to — cũng là luyện phát âm luôn đó!'],
+  ['护眼时间', 'Giờ bảo vệ mắt', 'Chớp mắt 10 lần thật chậm. Mắt đỡ khô, nhìn chữ Hán nét nào ra nét nấy.'],
+  ['错了没关系', 'Sai cũng không sao', '错了没关系 — sai không sao. Người không bao giờ sai là người chưa bao giờ làm bài!'],
+  ['补充能量', 'Nạp năng lượng', 'Đói bụng thì não chỉ nghĩ tới 饺子 (jiǎozi). Ăn nhẹ chút hạt, chuối rồi học tiếp nhé.'],
+  ['一天一点', 'Mỗi ngày một chút', 'Học một chút mỗi ngày tốt hơn ôm cả buổi rồi bỏ cả tuần. Gấu ăn tre cũng ăn từng khúc mà.'],
+  ['坐直', 'Ngồi thẳng lưng', 'Lưng thẳng như nét sổ “丨”, vai thả lỏng như nét phẩy “丿”. Đẹp dáng mà học cũng tỉnh.'],
+  ['好记性不如烂笔头', 'Ghi chép đi', 'Trí nhớ tốt không bằng ngòi bút cùn. Chép tay câu hay vào sổ, nhớ lâu gấp đôi.'],
+  ['出去晒太阳', 'Ra phơi nắng', 'Nắng sáng có vitamin D, tâm trạng tốt hẳn. Vừa đi vừa nhẩm “阳光” (yángguāng) cho đúng chủ đề.'],
+  ['熊猫的秘密', 'Bí mật của gấu', 'Gấu trúc tròn vo vì ăn đều đặn chứ không ăn dồn. Học cũng thế: đều đặn mới “tròn” kiến thức.'],
+  ['温故知新', 'Ôn cũ biết mới', 'Ôn bài cũ sẽ thấy điều mới. Hôm nay thử làm lại một bài đã học xem có “ngộ” ra gì không!'],
+  ['放松肩膀', 'Thả lỏng vai', 'Nhún vai lên tới tai, giữ 3 giây rồi thả “bịch”. Làm 5 lần, mỏi vai bay mất.'],
+  ['你今天喝水了吗？', 'Hôm nay uống nước chưa?', 'Câu hỏi chuẩn ngữ pháp có “了吗”! Và câu trả lời chuẩn sức khỏe là: “喝了，喝了很多！”'],
+  ['小目标', 'Mục tiêu nhỏ', 'Đặt mục tiêu nhỏ: hôm nay đúng 10 câu liên tiếp. Đạt được thì tự thưởng một miếng chocolate!'],
+  ['听歌学中文', 'Nghe nhạc học tiếng Trung', 'Nghe một bài nhạc Hoa yêu thích, bắt được một từ quen là tính điểm. Vừa thư giãn vừa luyện tai.'],
+  ['别熬夜', 'Đừng thức khuya', 'Thức khuya mắt thâm như gấu trúc — mà gấu trúc thì dễ thương, còn mình thì… chỉ mệt thôi.'],
+  ['语法不可怕', 'Ngữ pháp không đáng sợ', 'Bổ ngữ xu hướng nghe ghê vậy thôi: 上来、下去 chỉ là “lên đây”, “xuống đó”. Gấu tin bạn!'],
+  ['休息一下', 'Nghỉ một lát', 'Học 25 phút, nghỉ 5 phút (kiểu Pomodoro). Đầu óc tươi như 西瓜 (xīguā) mùa hè.'],
+  ['好好吃饭', 'Ăn uống đàng hoàng', 'Đừng vừa ăn vừa học. Ăn cho ngon đã, “吃饱了才有力气学习” — no rồi mới có sức học.'],
+  ['读出来', 'Đọc thành tiếng', 'Đọc to phần “Câu hoàn chỉnh” sau mỗi câu. Ngữ cảm đến từ miệng chứ không chỉ từ mắt.'],
+  ['一步一个脚印', 'Chắc từng bước', 'Đi từng bước để lại dấu chân. Hiểu vì sao đúng quan trọng hơn chọn trúng may mắn.'],
+  ['给自己点赞', 'Tự khen mình đi', 'Nhìn vòng tròn tiến độ bên phải xem — mỗi câu làm là một bước. Bấm like cho chính mình nào 👍'],
+  ['喝杯热茶', 'Một tách trà nóng', 'Trà nóng ấm bụng, ấm cả tinh thần. Người Trung Quốc nói: 茶要慢慢喝 — trà phải uống từ từ.'],
+  ['动动手指', 'Cử động ngón tay', 'Xòe nắm tay 10 lần, xoay cổ tay vài vòng. Ngón tay dẻo thì viết chữ Hán mới mượt.'],
+  ['不怕慢只怕站', 'Chậm không sợ, chỉ sợ dừng', '不怕慢，只怕站 — không sợ chậm, chỉ sợ đứng yên. Hôm nay làm thêm một câu thôi cũng được!'],
+  ['熊猫提醒', 'Gấu nhắc nhẹ', 'Ngồi học xa màn hình khoảng một cánh tay nhé. Mắt khỏe thì gấu mới yên tâm đi ăn tre.'],
+  ['学中文很有意思', 'Học tiếng Trung thú vị lắm', 'Một chữ 好 = 女 + 子: có phụ nữ và con trẻ là “tốt”. Chữ Hán toàn chuyện hay ho vậy đó!'],
+  ['保持微笑', 'Giữ nụ cười', 'Gặp câu khó thì cười trước rồi tính sau. Gấu đọc được là: “这个题不难，我能行！”'],
+  ['换个姿势', 'Đổi tư thế', 'Ngồi lâu thì đứng học vài câu. Thay đổi tư thế giúp máu lưu thông, đầu óc tỉnh táo.'],
+  ['复习错题', 'Ôn câu sai', 'Câu sai là kho báu: mỗi câu chỉ ra một lỗ hổng. Lấp xong lỗ hổng là lên trình thấy rõ!'],
+  ['早上好', 'Chào buổi sáng', 'Buổi sáng não tỉnh nhất. Làm 5 câu trước khi lướt mạng xã hội — một khởi đầu xịn xò.'],
+  ['晚安', 'Chúc ngủ ngon', 'Trước khi ngủ đọc lại 3 câu đã học, não sẽ tự ôn trong lúc mơ. Ngủ cũng là học, tuyệt chưa!'],
+  ['走路去', 'Đi bộ đi', 'Ngắn thì đi bộ thay vì xe. Vừa khỏe chân vừa nhẩm “走着去” — đúng mẫu câu có “着” luôn.'],
+  ['相信自己', 'Tin vào bản thân', '你可以的 — bạn làm được mà. Gấu trúc tròn vo còn leo được cây, câu chữ 把 có là gì!'],
+  ['今天也要开心', 'Hôm nay cũng phải vui', 'Học vui, sống khỏe, ngủ ngon. Gấu chúc bạn một ngày 开开心心！']
+];
+
+// tap the home panda: a different sticker each time + the next tip from a shuffled deck (no repeat until all 50 are seen)
+const TAP_MOODS = ['cheer', 'think', 'wonder', 'sleep', 'sad', 'angry'];
+function heroTap(){
+  const m = $('#mascot'); if (!m) return;
+  const others = TAP_MOODS.filter(x => x !== m.dataset.mood);
+  const mood = others[Math.floor(Math.random() * others.length)];
+  m.dataset.mood = mood; m.innerHTML = panda(mood);
+  if (!Array.isArray(st.tipDeck) || !st.tipDeck.length) {
+    st.tipDeck = TIPS.map((_, i) => i);
+    for (let i = st.tipDeck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [st.tipDeck[i], st.tipDeck[j]] = [st.tipDeck[j], st.tipDeck[i]]; }
+  }
+  const [zh, vi, msg] = TIPS[st.tipDeck.pop()]; save();
+  const b = app.querySelector('.hero .bubble');
+  b.innerHTML = `<div class="hi"><span class="zhf">${esc(zh)}</span>${esc(vi)}</div><div class="say">${esc(msg)}</div><div class="tipn">Gấu còn ${st.tipDeck.length || TIPS.length} lời nhắn nữa · bấm tiếp nhé</div>`;
+  b.classList.remove('tipin'); void b.offsetWidth; b.classList.add('tipin');
+}
 function heroHtml(wrongN){
   const s = stats(ITEMS.filter(inLesson));
   let hi, say, act = '';
@@ -493,7 +570,7 @@ function heroHtml(wrongN){
   }
   const acc = s.done ? s.ok / s.done : 0;
   const mood = !unlocked() ? 'normal' : !s.done ? 'hero' : s.done === s.total || acc >= .8 ? 'cheer' : 'think';
-  return `<section class="hero"><div class="mascot">${panda(mood)}</div>
+  return `<section class="hero"><button class="mascot" id="mascot" data-mood="${mood}" type="button" title="Bấm vào gấu để nghe gấu nhắc nhở" aria-label="Bấm vào gấu để nghe một lời nhắc">${panda(mood)}<span class="tap" aria-hidden="true">👆</span></button>
     <div class="bubble"><div class="hi">${hi}</div><div class="say">${say}</div>${act ? `<div class="row">${act}</div>` : ''}</div>
     ${ring(s.done, s.total)}</section>`;
 }
@@ -547,6 +624,7 @@ function showHome(){
   $('#hq').oninput = e => { if (e.target.value.trim()) showSearch(e.target.value); };
   app.querySelectorAll('[data-start]').forEach(b => b.onclick = () => { st.lesson = b.dataset.start; save(); startSession({cat: 'pos'}); });
   $('#review').onclick = () => startSession({review: true});
+  const ms = $('#mascot'); if (ms) ms.onclick = heroTap;
   $('#flags').onclick = showFlags;
   $('#reset').onclick = e => {
     const b = e.currentTarget;
