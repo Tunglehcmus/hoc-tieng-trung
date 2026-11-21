@@ -204,6 +204,17 @@ kbd{font:11px var(--ui);border:1px solid var(--line);border-bottom-width:2px;bor
 .hit .src{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);font-weight:700}
 .hit .txt{font-family:var(--zh);font-size:19px;line-height:1.6;word-break:break-all}
 .hit .more{font-size:13px;color:var(--muted);line-height:1.5}
+.shelp{font-size:13px;color:var(--muted);margin:8px 4px 0;line-height:1.5}
+.sfilters .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.sfilters .chip{font:700 13px var(--ui);padding:5px 12px;border-radius:999px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}
+.sfilters .chip span{color:var(--muted);font-weight:800;margin-left:2px}
+.sfilters .chip.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.sfilters .chip.on span{color:var(--on-accent);opacity:.85}
+.hit .fbadges{display:inline-flex;gap:4px;margin-left:auto}
+.hit .fbadge{font:800 10px var(--ui);text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.hit .hopts{display:flex;flex-wrap:wrap;gap:6px 14px;font-family:var(--zh);font-size:16px}
+.hit .hopt b{font:800 12px var(--ui);color:var(--muted);margin-right:4px}
+.hit .hopt.ok{color:var(--ok)}.hit .hopt.ok b{color:var(--ok)}
 .hit .more b{font:800 11px var(--ui);text-transform:uppercase;letter-spacing:.05em;margin-right:6px}
 mark{background:var(--gold-soft);color:inherit;border-radius:4px;padding:0 2px;box-shadow:inset 0 -2px 0 var(--gold)}
 .st-ok{color:var(--ok)} .st-bad{color:var(--bad)}
@@ -539,72 +550,138 @@ function showExams(id = 'hsk'){
   window.scrollTo(0, 0);
 }
 /* ---------------- Search ---------------- */
-const SNORM = t => String(t || '').toLowerCase().replace(/[\s，。、！？；：“”‘’（）()《》…·.,!?;:"'\-—_＿]/g, '');
-let SIDX = null;
+// Searches every field of a question: stem, all options (right or wrong), answers, analysis and the
+// Vietnamese translations. Several words separated by spaces must all be found (in any field).
+// Vietnamese is matched without diacritics ("ban" finds "bạn"); punctuation and spaces are ignored.
+const SKIP = /[\s，。、！？；：“”‘’（）()《》〈〉【】…·.,!?;:"'\-—_＿/|]/;
+const fold = c => c.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd');
+const SNORM = t => [...String(t || '')].filter(c => !SKIP.test(c)).map(fold).join('');
+// normalized text plus, for each normalized char, the index of the original char it came from
+function normMap(t){
+  const s = String(t || ''); let n = '', map = [];
+  [...s].forEach((c, i, arr) => { if (SKIP.test(c)) return; const f = fold(c); for (const ch of f) { n += ch; map.push(i); } });
+  return {n, map, chars: [...s]};
+}
+const FIELD_W = {stem: 100, opt: 70, ans: 50, ana: 25, vi: 15};
+const FIELD_LB = {stem: 'Đề', opt: 'Phương án', ans: 'Đáp án', ana: 'Lời giải', vi: 'Dịch'};
+let SIDX = null, SLOCK = null;
 function searchIndex(){
-  if (SIDX) return SIDX;
+  if (SIDX && SLOCK === unlocked()) return SIDX;
+  SLOCK = unlocked();
   SIDX = ITEMS.map(o => {
-    const q = [o.stem, o.word, o.sub, ...(o.options ? Object.values(o.options) : []), ...(o.tiles || [])].filter(Boolean).join(' | ');
-    const a = [...(o.corrections || []), ...(o.answers || []), ...(o.extra || []), o.answer && o.answer.length > 1 ? o.answer : '', o.analysis].filter(Boolean).join(' | ');
-    return {o, q: SNORM(q), a: SNORM(a)};
+    const f = [];
+    const add = (kind, text, label) => { if (text) f.push({kind, text: String(text), label, n: SNORM(text)}); };
+    add('stem', o.cat === 'order' ? o.tiles.join(' / ') : o.stem);
+    if (o.word) add('stem', o.word, 'Từ cần đặt');
+    if (o.sub) add('stem', o.sub);
+    if (o.options) 'ABCD'.split('').forEach(k => o.options[k] && add('opt', o.options[k], k + (SLOCK && o.answer === k ? ' ✓' : '')));
+    if (SLOCK) {
+      [...(o.corrections || []), ...(o.answers || [])].forEach(a => add('ans', a));
+      if (o.cat === 'order' && !(o.answers || []).length) add('ans', o.answer);
+      if (o.xzh && o.cat !== 'order' && o.cat !== 'bingju') add('ans', o.xzh, 'Câu hoàn chỉnh');
+      (o.extra || []).forEach(a => add('ans', a, 'Ví dụ thêm'));
+      add('ana', o.analysis);
+      add('vi', o.xvi, 'Dịch câu'); add('vi', o.xana, 'Dịch lời giải');
+    }
+    return {o, f, all: f.map(x => x.n).join('|')};
   });
   return SIDX;
 }
-function runSearch(query){
-  const k = SNORM(query);
-  if (!k) return [];
-  const withAns = unlocked();
-  return searchIndex().filter(x => x.q.includes(k) || (withAns && x.a.includes(k))).map(x => x.o);
+// split the query into terms: Chinese words separated by spaces are separate terms,
+// consecutive Latin (Vietnamese) words stay together as one phrase
+function searchTerms(query){
+  const out = [];
+  for (const w of String(query || '').trim().split(/\s+/).filter(Boolean)) {
+    const latin = /^[^㐀-鿿]+$/.test(w);
+    if (latin && out.length && out[out.length - 1].latin) out[out.length - 1].w += ' ' + w; else out.push({w, latin});
+  }
+  return out.map(t => SNORM(t.w)).filter(Boolean);
 }
-function hl(text, query){
-  const chars = [...SNORM(query)].map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  if (!chars.length) return esc(text);
-  const re = new RegExp(chars.join('[\\s，。、！？；：“”‘’（）()《》…·.,!?;:"\'\\-—_＿]*'), 'gi');
-  let out = '', last = 0, m;
-  const t = String(text || '');
-  while ((m = re.exec(t)) && m[0].length) { out += esc(t.slice(last, m.index)) + '<mark>' + esc(m[0]) + '</mark>'; last = m.index + m[0].length; }
-  return out + esc(t.slice(last));
+function runSearch(query){
+  const terms = searchTerms(query);
+  if (!terms.length) return [];
+  const out = [];
+  for (const x of searchIndex()) {
+    if (!terms.every(t => x.all.includes(t))) continue;
+    const hitF = x.f.filter(f => terms.some(t => f.n.includes(t)));
+    const kinds = [...new Set(hitF.map(f => f.kind))];
+    // best field first, then how many fields matched, then a whole-term match in the stem
+    const score = Math.max(...kinds.map(k => FIELD_W[k])) + kinds.length * 3 + (terms.every(t => x.f[0] && x.f[0].n.includes(t)) ? 20 : 0);
+    out.push({o: x.o, hitF, kinds, score});
+  }
+  return out.sort((a, b) => b.score - a.score);
+}
+// highlight every occurrence of every term (diacritics/punctuation-insensitive); window = snippet length
+function hl(text, query, window){
+  const terms = searchTerms(query);
+  const {n, map, chars} = normMap(text);
+  const on = new Array(chars.length).fill(false);
+  let first = -1;
+  for (const t of terms) { let i = n.indexOf(t); while (i >= 0) { for (let j = i; j < i + t.length; j++) on[map[j]] = true; if (first < 0 || map[i] < first) first = map[i]; i = n.indexOf(t, i + 1); } }
+  let from = 0, to = chars.length;
+  if (window && chars.length > window) { from = Math.max(0, (first < 0 ? 0 : first) - Math.floor(window / 3)); to = Math.min(chars.length, from + window); }
+  let out = from ? '…' : '', open = false;
+  for (let i = from; i < to; i++) {
+    if (on[i] && !open) { out += '<mark>'; open = true; }
+    if (!on[i] && open && !(SKIP.test(chars[i]) && on[i + 1])) { out += '</mark>'; open = false; }
+    out += esc(chars[i]);
+  }
+  return out + (open ? '</mark>' : '') + (to < chars.length ? '…' : '');
 }
 function hitStatus(o){ const r = st.res[o.key]; return !r ? '<span>Chưa làm</span>' : r.ok ? '<span class="st-ok">✓ Đúng</span>' : '<span class="st-bad">✗ Sai</span>'; }
 function typeName(o){ return o.set ? setInfo(o.set).vi : (CATS.find(c => c.id === o.cat) || {}).vi; }
-function hitHtml(o, query, idx){
-  const main = o.cat === 'order' ? o.tiles.join(' / ') : o.stem + (o.word ? `  〔${o.word}〕` : '') + (o.options ? '  ' + 'ABCD'.split('').map(k => `${k}.${o.options[k] || ''}`).join('  ') : '');
-  let more = '';
-  if (unlocked() && !SNORM(main).includes(SNORM(query))) {
-    const ans = [...(o.corrections || []), ...(o.answers || []), o.cat === 'order' ? o.answer : ''].filter(Boolean);
-    const inAns = ans.find(a => SNORM(a).includes(SNORM(query)));
-    if (inAns) more = `<div class="more"><b>Đáp án</b>${hl(inAns, query)}</div>`;
-    else if (o.analysis) {
-      const i = SNORM(o.analysis) ? o.analysis.search(new RegExp([...SNORM(query)].map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.{0,3}'))) : -1;
-      const from = Math.max(0, i - 30);
-      more = `<div class="more"><b>Lời giải</b>${from ? '…' : ''}${hl(o.analysis.slice(from, from + 110), query)}…</div>`;
-    }
-  }
-  return `<button class="hit" data-h="${idx}"><span class="src"><span class="qmeta" style="margin:0"><span class="tag">${esc(typeName(o))}</span></span>${srcLabel(o)} · ${hitStatus(o)}</span>
-    <span class="txt">${hl(main, query)}</span>${more}</button>`;
+function hitHtml(h, query, idx){
+  const o = h.o;
+  const main = o.cat === 'order' ? o.tiles.join(' / ') : o.stem;
+  // options are always shown (matched ones highlighted, the right one marked once unlocked)
+  const opts = o.options ? `<span class="hopts">${'ABCD'.split('').filter(k => o.options[k]).map(k =>
+      `<span class="hopt${unlocked() && o.answer === k ? ' ok' : ''}"><b>${k}</b>${hl(o.options[k], query)}</span>`).join('')}</span>` : '';
+  const word = o.word ? `<span class="hopts"><span class="hopt"><b>Từ</b>${hl(o.word, query)}</span></span>` : '';
+  // other matched fields: one line each, at most 3
+  const extra = h.hitF.filter(f => f.kind !== 'stem' && f.kind !== 'opt').slice(0, 3).map(f =>
+      `<div class="more"><b>${esc(f.label || FIELD_LB[f.kind])}</b>${hl(f.text, query, f.kind === 'ana' || f.kind === 'vi' ? 90 : 0)}</div>`).join('');
+  const badges = h.kinds.map(k => `<span class="fbadge">${FIELD_LB[k]}</span>`).join('');
+  return `<button class="hit" data-h="${idx}"><span class="src"><span class="qmeta" style="margin:0"><span class="tag">${esc(typeName(o))}</span></span>${srcLabel(o)} · ${hitStatus(o)}<span class="fbadges">${badges}</span></span>
+    <span class="txt">${hl(main, query)}</span>${word}${opts}${extra}</button>`;
 }
 function showSearch(query = st.lastSearch || ''){
   S = null;
   app.innerHTML = `<div class="toolbar"><span class="title"><span class="ico" aria-hidden="true">搜</span><span class="zh">搜索</span>Tìm câu hỏi</span><button class="btn" id="back">← Trang chủ</button></div>
-    <form class="searchbox" id="sform" role="search" style="margin-top:0"><input id="sq" type="search" autocomplete="off" placeholder="Gõ từ khoá tiếng Trung, vd: 把, 了, 比较, 北京…" aria-label="Từ khoá"></form>
+    <form class="searchbox" id="sform" role="search" style="margin-top:0"><input id="sq" type="search" autocomplete="off" placeholder="Gõ tiếng Trung hoặc tiếng Việt, vd: 把, 了 过, 比较, so sánh…" aria-label="Từ khoá"></form>
+    <div class="shelp">Tìm trong đề, tất cả phương án (đúng lẫn sai), đáp án, lời giải và bản dịch. Nhiều từ cách nhau bằng dấu cách = câu phải có đủ các từ. Tiếng Việt gõ không dấu cũng được.</div>
+    <div class="sfilters" id="sfilters"></div>
     <div class="scount" id="scount" aria-live="polite"></div><div class="sres" id="sres"></div>`;
   $('#back').onclick = showHome;
   const inp = $('#sq'); inp.value = query;
-  let timer = null;
+  let timer = null, filt = st.searchType || 'all', field = 'all', limit = 40;
   const go = () => {
-    const q = inp.value.trim(); st.lastSearch = q; save();
-    const res = q ? runSearch(q) : [];
-    const shown = res.slice(0, 80);
-    $('#scount').textContent = !q ? 'Gõ từ khoá để tìm trong cả ' + ITEMS.length + ' câu.' + (unlocked() ? '' : ' (Chưa mở khoá: chỉ tìm trong đề, không tìm trong đáp án.)')
-      : res.length ? `Tìm thấy ${res.length} câu${res.length > shown.length ? `, hiện ${shown.length} câu đầu. Gõ thêm chữ để thu hẹp` : ''}.` : 'Không tìm thấy câu nào có từ khoá này.';
-    $('#sres').innerHTML = shown.map((o, i) => hitHtml(o, q, i)).join('');
+    const q = inp.value.trim(); st.lastSearch = q; st.searchType = filt; save();
+    const all = q ? runSearch(q) : [];
+    // filter chips: by question type and by where the word was found
+    const types = [...new Set(all.map(h => typeName(h.o)))];
+    if (filt !== 'all' && !types.includes(filt)) filt = 'all';
+    const byType = all.filter(h => filt === 'all' || typeName(h.o) === filt);
+    const kinds = Object.keys(FIELD_LB).filter(k => byType.some(h => h.kinds.includes(k)));
+    if (field !== 'all' && !kinds.includes(field)) field = 'all';
+    const res = byType.filter(h => field === 'all' || h.kinds.includes(field));
+    const chip = (attr, val, cur, label, n) => `<button class="chip ${val === cur ? 'on' : ''}" data-${attr}="${esc(val)}">${esc(label)} <span>${n}</span></button>`;
+    $('#sfilters').innerHTML = all.length ? `<div class="chips">${chip('t', 'all', filt, 'Tất cả dạng', all.length)}${types.map(t => chip('t', t, filt, t, all.filter(h => typeName(h.o) === t).length)).join('')}</div>
+      ${kinds.length > 1 ? `<div class="chips">${chip('f', 'all', field, 'Tìm thấy ở: mọi chỗ', byType.length)}${kinds.map(k => chip('f', k, field, FIELD_LB[k], byType.filter(h => h.kinds.includes(k)).length)).join('')}</div>` : ''}` : '';
+    $('#sfilters').querySelectorAll('[data-t]').forEach(b => b.onclick = () => { filt = b.dataset.t; field = 'all'; limit = 40; go(); });
+    $('#sfilters').querySelectorAll('[data-f]').forEach(b => b.onclick = () => { field = b.dataset.f; limit = 40; go(); });
+    const shown = res.slice(0, limit);
+    $('#scount').textContent = !q ? 'Gõ từ khoá để tìm trong cả ' + ITEMS.length + ' câu.' + (unlocked() ? '' : ' (Chưa mở khoá: chỉ tìm trong đề và phương án.)')
+      : res.length ? `Tìm thấy ${res.length} câu, xếp theo mức liên quan (khớp ở đề trước).` : 'Không tìm thấy câu nào có đủ các từ khoá này.';
+    $('#sres').innerHTML = shown.map((h, i) => hitHtml(h, q, i)).join('') +
+      (res.length > shown.length ? `<button class="btn" id="smore" style="align-self:center">Xem thêm ${Math.min(40, res.length - shown.length)} câu (còn ${res.length - shown.length})</button>` : '');
     $('#sres').querySelectorAll('.hit').forEach(b => b.onclick = () => {
-      const i = +b.dataset.h;
-      S = {opt: {search: q}, base: res, list: [...res], i, shuffle: false, onlyNew: false};
+      const list = res.map(h => h.o);
+      S = {opt: {search: q}, base: list, list: [...list], i: +b.dataset.h, shuffle: false, onlyNew: false};
       render(); window.scrollTo(0, 0);
     });
+    const m = $('#smore'); if (m) m.onclick = () => { limit += 40; go(); };
   };
-  inp.oninput = () => { clearTimeout(timer); timer = setTimeout(go, 120); };
+  inp.oninput = () => { clearTimeout(timer); limit = 40; timer = setTimeout(go, 150); };
   $('#sform').onsubmit = e => { e.preventDefault(); go(); };
   go();
   inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length);
