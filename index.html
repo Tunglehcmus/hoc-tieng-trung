@@ -202,6 +202,7 @@ textarea:focus{outline:none;border-color:var(--accent);background:var(--paper)}
 .dpl.note{margin-top:8px;font-size:14px}
 .dprow{margin-top:8px;padding:8px 12px;border-radius:12px;background:var(--paper);display:flex;flex-direction:column;gap:2px}
 .dprow .pat{font-weight:800;font-size:13px;color:var(--muted)}.dprow .zhs{font-family:var(--zh);font-size:18px}.dprow .vis{font-size:14px}
+.tipnote{color:var(--req);font-weight:800;font-size:14px;letter-spacing:.02em;margin:-4px 0 10px}
 .ana .lb,.lb{font:800 12px var(--ui);color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px}
 .diff del{color:var(--bad);text-decoration:none;background:var(--bad-soft);border-radius:3px}
 .diff ins{color:var(--ok);text-decoration:none;background:var(--ok-soft);border-radius:3px}
@@ -858,6 +859,7 @@ function render(){
       <label class="tog"><input type="checkbox" id="onlynew" ${S.onlyNew?'checked':''}> Bỏ câu đã đúng</label>
       <button class="btn" id="back">${S.opt.search != null ? '← Kết quả tìm' : S.opt.set && setInfo(S.opt.set).exams ? '← Chọn đề' : '← Dạng bài'}</button>
     </div>
+    ${S.opt.set === 'dapei' && !S.shuffle ? '<div class="tipnote">ĐỀ XUẤT CHỌN TÍNH NĂNG TRỘN CÂU ĐỂ LUYỆN TẬP HIỆU QUẢ HƠN</div>' : ''}
     ${o ? `<div class="qcard" id="q"></div>
     <div class="nav">
       <button class="btn" id="prev" ${S.i?'':'disabled'}>← Trước</button>
