@@ -218,6 +218,7 @@ mark{background:var(--gold-soft);color:inherit;border-radius:4px;padding:0 2px;b
 .slot .tile{background:var(--t-order);border-color:var(--c-order);box-shadow:0 2px 0 var(--c-order)}
 .tile:disabled{cursor:default}
 .bank .tile.used{display:none}
+.tile.frame{border-style:dashed;border-color:var(--accent,var(--c-order));color:var(--c-order)}
 .answer-line{font-family:var(--zh);font-size:22px;line-height:1.7}
 .exams{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
 .exam{display:flex;flex-direction:column;gap:6px;align-items:flex-start;padding:14px 16px;border-radius:20px;border:1.5px solid var(--line);background:var(--paper);box-shadow:var(--shadow);text-align:left}
@@ -796,7 +797,24 @@ function renderChoice(o, q){
 /* --- word order (连词成句) --- */
 let ORD = {key: null, seq: []};
 const cjOnly = s => (s || '').replace(/[^一-鿿]/g, '');
-function orderSentence(o, seq){ return seq.map(i => o.tiles[i]).join(''); }
+// Frame tiles (在……上): picking one places its opening part (在) and the tile in the bank turns into
+// its closing part (…上). The closing part is stored in seq as ~i (a negative number).
+const isFrame = t => t.includes('…');
+const frameOpen = t => t.split(/…+/)[0];
+const frameClose = t => t.split(/…+/).slice(1).join('');
+function orderPiece(o, seq, x){
+  if (x < 0) return frameClose(o.tiles[~x]);
+  const t = o.tiles[x];
+  return isFrame(t) && seq.some(y => y < 0) ? frameOpen(t) : t;   // old saved answers had no closing parts
+}
+function orderSentence(o, seq){ return seq.map(x => orderPiece(o, seq, x)).join(''); }
+// every tile placed and (strict) every frame closed
+function orderFull(o, seq, strict){
+  if (!o.tiles.every((t, i) => seq.includes(i))) return false;
+  const closes = seq.some(y => y < 0);
+  if (!strict && !closes) return true;
+  return o.tiles.every((t, i) => !isFrame(t) || seq.includes(~i));
+}
 const PUN = s => String(s || '').replace(/,/g, '，').replace(/\?/g, '？').replace(/!/g, '！');
 const withPunct = s => PUN(s).replace(/[^\u4e00-\u9fff，。？！]/g, '');
 const punctOf = s => [...withPunct(s)].filter(c => '，。？！'.includes(c)).sort().join('');
@@ -804,6 +822,11 @@ function orderMatches(o, seq){
   return (o.answers || [o.answer]).some(a => orderMatchOne(o, seq, a));
 }
 function orderMatchOne(o, seq, answer){
+  if (seq.some(y => y < 0)) {               // frames placed with explicit closing parts: compare the sentence
+    const tilePunct = o.tiles.filter(t => !cjOnly(t)).map(punctOf).join('').split('').sort().join('');
+    const mine = orderSentence(o, seq);
+    return tilePunct && tilePunct === punctOf(answer) ? withPunct(mine) === withPunct(answer) : cjOnly(mine) === cjOnly(answer);
+  }
   // When the tiles include punctuation that matches the answer, its position is graded as well.
   const tilePunct = o.tiles.filter(t => !cjOnly(t)).map(punctOf).join('').split('').sort().join('');
   if (tilePunct && tilePunct === punctOf(answer) && !o.tiles.some(t => t.includes('…')))
@@ -834,14 +857,17 @@ function renderOrder(o, q){
   const r = st.res[o.key];
   const done = !!(r && r.seq);
   if (ORD.key !== o.key) ORD = {key: o.key, seq: done ? r.seq.slice() : []};
-  const seq = ORD.seq, full = seq.length === o.tiles.length;
+  const seq = ORD.seq, full = orderFull(o, seq, true);
+  const bankLabel = (t, i) => isFrame(t) && seq.includes(i) && !seq.includes(~i) ? '…' + frameClose(t) : t;
+  const bankUsed = (t, i) => seq.includes(i) && (!isFrame(t) || seq.includes(~i));
+  const frameCls = (x) => x < 0 || (isFrame(o.tiles[x]) && seq.some(y => y < 0)) ? ' frame' : '';
   const slotCls = done ? (r.ok ? 'ok' : 'bad') : '';
   q.innerHTML = metaLine(o) + `
     <div class="lead">Sắp xếp các từ sau thành câu hoàn chỉnh:</div>
     ${o.tiles.some(t => !cjOnly(t)) ? '<div class="hint" style="margin:0">Có cả ô dấu câu (，。): đặt chúng vào đúng chỗ trong câu.</div>' : ''}
-    ${o.tiles.some(t => t.includes('…')) ? '<div class="hint" style="margin:0">Ô có dấu …… (như 在……上) là cấu trúc khung: đặt ô đó trước các từ nằm bên trong khung.</div>' : ''}
-    <div class="slot ${slotCls}" id="slot" aria-label="Câu bạn đang ghép">${seq.length ? seq.map((i, k) => `<button class="tile" data-pos="${k}" ${done ? 'disabled' : ''}>${esc(o.tiles[i])}</button>`).join('') : '<span class="ph">Bấm vào các từ bên dưới theo đúng thứ tự…</span>'}</div>
-    <div class="bank">${o.tiles.map((t, i) => `<button class="tile ${seq.includes(i) ? 'used' : ''}" data-i="${i}" ${done || seq.includes(i) ? 'disabled' : ''}>${esc(t)}<span class="n">${i + 1}</span></button>`).join('')}</div>
+    ${o.tiles.some(t => t.includes('…')) ? '<div class="hint" style="margin:0">Ô khung (như 在……上): bấm lần 1 đặt 在, ô đó đổi thành …上 — bấm các từ nằm giữa rồi bấm …上 để đóng khung.</div>' : ''}
+    <div class="slot ${slotCls}" id="slot" aria-label="Câu bạn đang ghép">${seq.length ? seq.map((x, k) => `<button class="tile${frameCls(x)}" data-pos="${k}" ${done ? 'disabled' : ''}>${esc(orderPiece(o, seq, x))}</button>`).join('') : '<span class="ph">Bấm vào các từ bên dưới theo đúng thứ tự…</span>'}</div>
+    <div class="bank">${o.tiles.map((t, i) => `<button class="tile ${bankUsed(t, i) ? 'used' : seq.includes(i) ? 'frame' : ''}" data-i="${i}" ${done || bankUsed(t, i) ? 'disabled' : ''}>${esc(bankLabel(t, i))}<span class="n">${i + 1}</span></button>`).join('')}</div>
     ${done ? orderResult(o, r) : `<div class="row" style="margin-top:14px">
       <button class="btn primary" id="ocheck" ${full ? '' : 'disabled'}>Kiểm tra</button>
       <button class="btn" id="oreset" ${seq.length ? '' : 'disabled'}>Làm lại</button>
@@ -850,7 +876,10 @@ function renderOrder(o, q){
   if (done) { const g = $('#oselfok'); if (g) g.onclick = () => { record(o, true, Object.assign(st.res[o.key], {ok: true, self: true})); renderQ(o); };
     $('#oretry').onclick = () => { delete st.res[o.key]; ORD = {key: null, seq: []}; save(); topStats(); render(); }; return; }
   q.querySelectorAll('.bank .tile').forEach(b => b.onclick = () => orderPick(o, +b.dataset.i));
-  q.querySelectorAll('.slot .tile').forEach(b => b.onclick = () => { ORD.seq.splice(+b.dataset.pos, 1); renderQ(o); });
+  q.querySelectorAll('.slot .tile').forEach(b => b.onclick = () => {
+    const x = ORD.seq[+b.dataset.pos];
+    ORD.seq = ORD.seq.filter(y => y !== x && !(x >= 0 && y === ~x));   // removing an opening part also removes its closing part
+    renderQ(o); });
   $('#ocheck').onclick = () => orderCheck(o, false);
   $('#oreset').onclick = () => { ORD.seq = []; renderQ(o); };
   $('#oshow').onclick = () => orderCheck(o, true);
@@ -858,15 +887,19 @@ function renderOrder(o, q){
 function orderPick(o, i){
   if (!unlocked()) { openLock(); return; }
   if (st.res[o.key] && st.res[o.key].seq) return;
-  if (i < 0 || i >= o.tiles.length || ORD.seq.includes(i)) return;
-  ORD.seq.push(i); renderQ(o);
+  if (i < 0 || i >= o.tiles.length) return;
+  if (!ORD.seq.includes(i)) ORD.seq.push(i);
+  else if (isFrame(o.tiles[i]) && !ORD.seq.includes(~i)) ORD.seq.push(~i);
+  else return;
+  renderQ(o);
 }
 function orderCheck(o, reveal){
   const seq = ORD.seq.slice();
   // a complete arrangement is always graded, whichever button was pressed;
   // "Xem đáp án" with tiles still left over counts as not solved
-  const ok = seq.length === o.tiles.length && orderMatches(o, seq);
-  record(o, ok, {seq, gaveUp: reveal && seq.length < o.tiles.length});
+  const full = orderFull(o, seq, true);
+  const ok = full && orderMatches(o, seq);
+  record(o, ok, {seq, gaveUp: reveal && !full});
   renderQ(o);
 }
 function orderResult(o, r){
@@ -874,11 +907,11 @@ function orderResult(o, r){
   const alts = o.answers || [o.answer];
   const best = alts.reduce((a, b) => lcsLen(mine, b) > lcsLen(mine, a) ? b : a);
   const v = r.ok ? verdictHtml('ok', r.self ? 'Bạn tự chấm: đúng' : 'Đúng thứ tự rồi!')
-    : verdictHtml('bad', r.seq.length < o.tiles.length ? 'Đây là đáp án đúng:' : 'Chưa đúng thứ tự. So sánh với đáp án nhé:');
+    : verdictHtml('bad', !orderFull(o, r.seq, false) ? 'Đây là đáp án đúng:' : 'Chưa đúng thứ tự. So sánh với đáp án nhé:');
   return `<div class="result">${v}
     <span class="lb">答案 · Đáp án${alts.length > 1 ? ` (${alts.length} cách đều đúng)` : ''}</span>${alts.map(a => `<div class="answer-line">${esc(a)}</div>`).join('')}
-    ${!r.ok && r.seq.length === o.tiles.length ? `<div class="ana diff"><span class="lb">Câu bạn ghép (<del>sai chỗ</del> / <ins>đáp án</ins>)</span>${diffHtml(mine, best)}</div>` : ''}
-    <div class="row" style="margin-top:12px">${!r.ok && r.seq.length === o.tiles.length ? '<button class="btn" id="oselfok" style="border-color:var(--ok);color:var(--ok)">✓ Câu của mình cũng đúng</button>' : ''}<button class="btn" id="oretry">Làm lại câu này</button></div></div>`;
+    ${!r.ok && orderFull(o, r.seq, false) ? `<div class="ana diff"><span class="lb">Câu bạn ghép (<del>sai chỗ</del> / <ins>đáp án</ins>)</span>${diffHtml(mine, best)}</div>` : ''}
+    <div class="row" style="margin-top:12px">${!r.ok && orderFull(o, r.seq, false) ? '<button class="btn" id="oselfok" style="border-color:var(--ok);color:var(--ok)">✓ Câu của mình cũng đúng</button>' : ''}<button class="btn" id="oretry">Làm lại câu này</button></div></div>`;
 }
 
 function verdictHtml(kind, msg){
@@ -982,7 +1015,7 @@ document.addEventListener('keydown', e => {
   if (o.cat === 'order') {
     if (/^[1-9]$/.test(e.key)) { orderPick(o, +e.key - 1); e.preventDefault(); return; }
     if (e.key === 'Backspace' && ORD.key === o.key && ORD.seq.length && !(st.res[o.key] && st.res[o.key].seq)) { ORD.seq.pop(); renderQ(o); e.preventDefault(); return; }
-    if (e.key === 'Enter' && !(st.res[o.key] && st.res[o.key].seq) && ORD.key === o.key && ORD.seq.length === o.tiles.length) { orderCheck(o, false); e.preventDefault(); return; }
+    if (e.key === 'Enter' && !(st.res[o.key] && st.res[o.key].seq) && ORD.key === o.key && orderFull(o, ORD.seq, true)) { orderCheck(o, false); e.preventDefault(); return; }
   }
   if ((o.cat === 'pos' || o.cat === 'choice') && ('ABCD'.includes(k) && k.length === 1 || map[k])) { answerChoice(o, map[k] || k); e.preventDefault(); }
   else if (e.key === 'ArrowRight' || e.key === 'Enter') { if (S.i < S.list.length-1) go(1); e.preventDefault(); }
