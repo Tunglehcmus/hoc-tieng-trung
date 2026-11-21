@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800&family=Noto+Serif+SC:wght@400;600;700&family=ZCOOL+KuaiLe&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800&family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@500;700&family=ZCOOL+KuaiLe&display=swap">
 <style>
 /* Layout: bamboo-grove study room. Rounded paper cards on a pale bamboo mist, a panda mascot
    that greets, cheers and consoles; Chinese set in Kai (textbook handwriting) for readability. */
@@ -23,6 +23,7 @@
   --leaf:#7fb069; --stalk:#9cc47f;
   --zh:"Noto Serif SC","Source Han Serif SC","Songti SC","SimSun",serif;
   --fun:"ZCOOL KuaiLe","Noto Serif SC",cursive;
+  --head:"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;   /* readable Chinese headings */
   --ui:"Nunito","Segoe UI",system-ui,-apple-system,"Microsoft YaHei",sans-serif;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
@@ -110,7 +111,7 @@ header.top .wrap{display:flex;align-items:center;gap:10px;height:60px}
 .ring .lbl span{font-size:11px;color:var(--muted);font-weight:700}
 
 h2{display:flex;align-items:center;gap:8px;font-size:14px;margin:28px 0 12px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.08em}
-h2 .zh{font-family:var(--fun);font-size:20px;text-transform:none;letter-spacing:0;color:var(--accent-2)}
+h2 .zh{font-family:var(--head);font-weight:700;font-size:19px;text-transform:none;letter-spacing:0;color:var(--accent-2)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{border:1.5px solid var(--line);background:var(--paper);border-radius:999px;padding:5px 14px;font-size:13px;font-weight:700;transition:border-color .15s}
 .chip:hover{border-color:var(--accent)}
@@ -120,7 +121,7 @@ h2 .zh{font-family:var(--fun);font-size:20px;text-transform:none;letter-spacing:
 .card{position:relative;background:var(--paper);border:1.5px solid var(--line);border-radius:22px;padding:18px 18px 16px;box-shadow:var(--shadow);text-align:left;display:grid;grid-template-columns:auto 1fr;gap:4px 14px;align-content:start;transition:transform .18s cubic-bezier(.3,1.6,.6,1),border-color .15s}
 .card:hover{transform:translateY(-3px) rotate(-.4deg);border-color:var(--cc)}
 .card .ico{grid-row:span 2;width:54px;height:54px;border-radius:18px;display:grid;place-items:center;font-family:var(--fun);font-size:30px;background:var(--tt);color:var(--cc)}
-.card .zh{font-family:var(--fun);font-size:24px;line-height:1.2;align-self:end}
+.card .zh{font-family:var(--head);font-weight:700;font-size:21px;line-height:1.3;letter-spacing:.02em;align-self:end}
 .card .vi{font-weight:800;align-self:start}
 .card .desc{grid-column:1 / -1;color:var(--muted);font-size:13px;margin-top:6px}
 .card .bar{grid-column:1 / -1;margin-top:8px}
@@ -142,7 +143,7 @@ h2 .zh{font-family:var(--fun);font-size:20px;text-transform:none;letter-spacing:
 .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:20px 0 12px}
 .toolbar .title{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;margin-right:auto}
 .toolbar .title .ico{width:40px;height:40px;border-radius:14px;display:grid;place-items:center;font-family:var(--fun);font-size:22px;background:var(--tt,var(--accent-soft));color:var(--cc,var(--accent))}
-.toolbar .title .zh{font-family:var(--fun);font-size:22px;font-weight:400}
+.toolbar .title .zh{font-family:var(--head);font-size:20px;font-weight:700;letter-spacing:.02em}
 label.tog{font-size:13px;display:flex;gap:6px;align-items:center;color:var(--muted);cursor:pointer;font-weight:700}
 label.tog input{accent-color:var(--accent);width:16px;height:16px}
 .qcard{position:relative;background:var(--paper);border:1.5px solid var(--line);border-radius:24px;padding:22px 24px 20px;box-shadow:var(--shadow)}
@@ -263,7 +264,7 @@ mark{background:var(--gold-soft);color:inherit;border-radius:4px;padding:0 2px;b
 .exams{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
 .exam{display:flex;flex-direction:column;gap:6px;align-items:flex-start;padding:14px 16px;border-radius:20px;border:1.5px solid var(--line);background:var(--paper);box-shadow:var(--shadow);text-align:left}
 .exam:hover{border-color:var(--cc,var(--c-hsk))}
-.exam b{font-family:var(--fun);font-size:22px;font-weight:400;color:var(--cc,var(--c-hsk))}
+.exam b{font-family:var(--head);font-size:20px;font-weight:700;color:var(--cc,var(--c-hsk))}
 .exam .bar{width:100%}
 
 /* lock */
