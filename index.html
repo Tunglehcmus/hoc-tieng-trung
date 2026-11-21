@@ -863,7 +863,9 @@ function orderPick(o, i){
 }
 function orderCheck(o, reveal){
   const seq = ORD.seq.slice();
-  const ok = !reveal && seq.length === o.tiles.length && orderMatches(o, seq);
+  // a complete arrangement is always graded, whichever button was pressed;
+  // "Xem đáp án" with tiles still left over counts as not solved
+  const ok = seq.length === o.tiles.length && orderMatches(o, seq);
   record(o, ok, {seq, gaveUp: reveal && seq.length < o.tiles.length});
   renderQ(o);
 }
