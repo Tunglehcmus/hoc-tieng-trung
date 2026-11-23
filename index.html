@@ -81,6 +81,15 @@ header.top .wrap{display:flex;align-items:center;gap:10px;height:60px}
 .sync{font-size:12px;border-radius:999px;padding:2px 10px;background:var(--chip);color:var(--muted);white-space:nowrap;font-weight:600}
 .sync[data-state="synced"]{background:var(--ok-soft);color:var(--ok)}
 .sync[data-state="slow"]{color:var(--warn)}
+button.sync{border:none;cursor:pointer;font-family:inherit}
+.sync[data-state="login"]{background:var(--accent);color:var(--on-accent)}
+.sync[data-state="err"]{color:var(--bad)}
+.acccard{width:min(340px,100%)}
+.acccard input{font:17px/1.4 var(--ui);padding:10px 12px;border:2px solid var(--line);border-radius:14px;background:var(--bg);color:var(--ink)}
+.acccard input:focus{outline:none;border-color:var(--accent)}
+.acccard .note{font-size:12.5px;color:var(--muted);line-height:1.5;text-align:center}
+.acccard .who{text-align:center;font-weight:800;font-size:17px}
+.acccard label.chk{font-size:13px;color:var(--muted);display:flex;gap:6px;align-items:center;justify-content:center}
 .iconbtn{border:1.5px solid var(--line);background:var(--paper);border-radius:999px;padding:5px 12px;font-size:13px;font-weight:700}
 #lockbtn{white-space:nowrap}
 #lockbtn[data-on="1"]{color:var(--ok);border-color:var(--ok)}
@@ -329,7 +338,7 @@ mark{background:var(--gold-soft);color:inherit;border-radius:4px;padding:0 2px;b
 <header class="top"><div class="wrap">
   <div class="brand" id="home" role="button" tabindex="0" aria-label="Về trang chủ"><span id="logo"></span>叶香学汉语<small>Luyện ngữ pháp</small></div>
   <div class="stats" id="topstats"></div>
-  <span class="sync" id="sync" data-state="local">Lưu trên máy này</span>
+  <button class="sync" id="sync" data-state="local" type="button">Lưu trên máy này</button>
   <button class="iconbtn" id="searchbtn" title="Tìm câu hỏi (phím /)" aria-label="Tìm câu hỏi">🔍</button>
   <button class="iconbtn" id="lockbtn">🔒 Nhập mật khẩu</button>
   <button class="iconbtn" id="theme" title="Đổi giao diện sáng/tối">◐</button>
@@ -392,23 +401,137 @@ let st = load();
   if (moved) try { localStorage.setItem(STORE, JSON.stringify(st)); } catch (e) {}
 })();
 function load(){ try { return JSON.parse(localStorage.getItem(STORE)) || {} } catch(e){ return {} } }
-function save(){ try { localStorage.setItem(STORE, JSON.stringify(st)) } catch(e){} schedulePush(); }
-st.res = st.res || {}; st.flags = st.flags || {}; st.lesson = st.lesson ?? 'all';
+function save(){ stampChanges(); try { localStorage.setItem(STORE, JSON.stringify(st)) } catch(e){} schedulePush(); }
+st.res = st.res || {}; st.flags = st.flags || {}; st.lesson = st.lesson ?? 'all'; st.del = st.del || {};
+
+/* ---- account sync (Cloudflare Worker + D1, ID + password) ----
+   every result carries u = time it last changed; a removed result leaves st.del[key] = time.
+   Each device sends everything, the Worker merges (newest wins) and returns the merged progress. */
+const SYNC_API = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? 'http://localhost:8787' : 'https://hoc-tieng-trung-sync.pcuranus.workers.dev';
+const ACC_KEY = 'zhgrammar.acc';
+let acc = null; try { acc = JSON.parse(localStorage.getItem(ACC_KEY)) || null; } catch (e) {}
+let snapRes = {}, snapFlags = '', cfTimer = null, cfBusy = false, cfAgain = false, cfLast = 0;
+const entryJson = e => { const {u, ...r} = e || {}; return JSON.stringify(r); };
+function resetSnap(){ snapRes = {}; for (const k in st.res) snapRes[k] = entryJson(st.res[k]); snapFlags = JSON.stringify(st.flags || {}); }
+function stampChanges(){
+  const now = Date.now();
+  for (const k in st.res) { const j = entryJson(st.res[k]); if (snapRes[k] !== j) { st.res[k].u = now; snapRes[k] = j; delete st.del[k]; } }
+  for (const k in snapRes) if (!st.res[k]) { st.del[k] = now; delete snapRes[k]; }
+  const fj = JSON.stringify(st.flags || {}); if (fj !== snapFlags) { st.flagsU = now; snapFlags = fj; }
+}
+resetSnap();
+const tmOf = e => (e && (e.u || e.t)) || 0;
+function mergeDocs(a, b){
+  const res = {}, del = {};
+  const keys = new Set([...Object.keys(a.res || {}), ...Object.keys(b.res || {}), ...Object.keys(a.del || {}), ...Object.keys(b.del || {})]);
+  for (const k of keys) {
+    const ra = (a.res || {})[k], rb = (b.res || {})[k];
+    const r = !ra ? rb : !rb ? ra : tmOf(rb) > tmOf(ra) ? rb : ra;
+    const d = Math.max((a.del || {})[k] || 0, (b.del || {})[k] || 0);
+    if (r && tmOf(r) >= d) res[k] = r; else if (d) del[k] = d;
+  }
+  const fb = (b.flagsU || 0) > (a.flagsU || 0);
+  return {res, del, flags: (fb ? b.flags : a.flags) || {}, flagsU: Math.max(a.flagsU || 0, b.flagsU || 0)};
+}
+async function cfCall(path, body, token){
+  const r = await fetch(SYNC_API + path, {method: 'POST', headers: Object.assign({'Content-Type': 'application/json'}, token ? {Authorization: 'Bearer ' + token} : {}), body: JSON.stringify(body || {})});
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  if (!r.ok) { const e = new Error(j.error || ('Lỗi ' + r.status)); e.status = r.status; throw e; }
+  return j;
+}
+function cfSchedule(ms){ if (!acc) return; clearTimeout(cfTimer); cfTimer = setTimeout(cfSync, ms ?? 1500); }
+async function cfSync(){
+  if (!acc) return;
+  if (cfBusy) { cfAgain = true; return; }
+  cfBusy = true; setSync('connecting');
+  try {
+    stampChanges();
+    const sent = JSON.stringify(st.res) + JSON.stringify(st.del) + (st.flagsU || 0);
+    const remote = await cfCall('/sync', {res: st.res, del: st.del, flags: st.flags, flagsU: st.flagsU || 0}, acc.token);
+    const before = Object.keys(st.res).length;
+    // results made while the request was on its way are kept by merging again
+    const m = mergeDocs(remote, {res: st.res, del: st.del, flags: st.flags, flagsU: st.flagsU});
+    st.res = m.res; st.del = m.del; st.flags = m.flags; st.flagsU = m.flagsU;
+    resetSnap(); try { localStorage.setItem(STORE, JSON.stringify(st)); } catch (e) {}
+    cfLast = Date.now(); setSync('synced');
+    if (JSON.stringify(st.res) + JSON.stringify(st.del) + (st.flagsU || 0) !== sent || Object.keys(st.res).length !== before) refreshView();
+  } catch (e) {
+    if (e.status === 401) { acc = null; try { localStorage.removeItem(ACC_KEY); } catch (x) {} setSync('login'); }
+    else setSync('err', e.message);
+  }
+  cfBusy = false;
+  if (cfAgain) { cfAgain = false; cfSync(); }
+}
+function openAccount(){
+  if ($('#lockdlg')) return;
+  const d = document.createElement('div'); d.id = 'lockdlg'; d.className = 'lockdlg';
+  const n = Object.keys(st.res).length;
+  d.innerHTML = acc
+    ? `<div class="lockcard acccard" role="dialog" aria-modal="true" aria-labelledby="lockt"><div class="face">${panda('happy')}</div>
+        <div class="lockt" id="lockt">Tài khoản</div><div class="who">${esc(acc.id)}</div>
+        <div class="note">Tiến độ tự đồng bộ giữa các máy đăng nhập cùng tài khoản.${cfLast ? '<br>Lần đồng bộ gần nhất: ' + new Date(cfLast).toLocaleTimeString('vi-VN') : ''}</div>
+        <div class="row"><button class="btn primary" id="accsync">Đồng bộ ngay</button><button class="btn" id="accout">Đăng xuất</button></div>
+        <label class="chk"><input type="checkbox" id="accwipe"> Khi đăng xuất, xoá tiến độ trên máy này</label>
+        <div class="row"><button class="btn" id="lockclose">Đóng</button></div></div>`
+    : `<form class="lockcard acccard" id="accform" role="dialog" aria-modal="true" aria-labelledby="lockt"><div class="face">${panda('normal')}</div>
+        <div class="lockt" id="lockt">Đăng nhập để đồng bộ</div>
+        <input id="accid" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="ID (vd: yenhuong)" aria-label="ID">
+        <input id="accpw" type="password" autocomplete="current-password" placeholder="Mật khẩu (ít nhất 6 ký tự)" aria-label="Mật khẩu">
+        <div class="lockerr" id="lockerr" aria-live="polite"></div>
+        <div class="row"><button class="btn primary" type="submit">Đăng nhập</button><button class="btn" type="button" id="accnew">Tạo tài khoản mới</button></div>
+        <div class="note">Đăng nhập cùng ID trên máy tính và điện thoại để dùng chung tiến độ.${n ? `<br>${n} câu đã làm trên máy này sẽ được gộp vào tài khoản.` : ''}</div>
+        <div class="row"><button class="btn" type="button" id="lockclose">Huỷ</button></div></form>`;
+  document.body.appendChild(d);
+  const close = () => d.remove();
+  d.addEventListener('click', e => { if (e.target === d) close(); });
+  $('#lockclose').onclick = close;
+  if (acc) {
+    $('#accsync').onclick = () => { close(); cfSync(); };
+    $('#accout').onclick = async () => {
+      const wipe = $('#accwipe').checked;
+      try { await cfCall('/logout', {}, acc.token); } catch (e) {}
+      acc = null; try { localStorage.removeItem(ACC_KEY); } catch (e) {}
+      if (wipe) { st.res = {}; st.del = {}; st.flags = {}; resetSnap(); try { localStorage.setItem(STORE, JSON.stringify(st)); } catch (e) {} }
+      setSync('login'); close(); refreshView();
+    };
+    return;
+  }
+  const go = async path => {
+    const id = $('#accid').value.trim().toLowerCase(), pw = $('#accpw').value;
+    $('#lockerr').textContent = '';
+    d.querySelectorAll('button').forEach(b => b.disabled = true);
+    try {
+      const r = await cfCall(path, {id, pw});
+      acc = {id: r.id, token: r.token}; try { localStorage.setItem(ACC_KEY, JSON.stringify(acc)); } catch (e) {}
+      close(); await cfSync();
+    } catch (e) {
+      $('#lockerr').textContent = e.status ? e.message : 'Không kết nối được máy chủ, kiểm tra mạng rồi thử lại.';
+      d.querySelectorAll('button').forEach(b => b.disabled = false);
+    }
+  };
+  $('#accform').onsubmit = e => { e.preventDefault(); go('/login'); };
+  $('#accnew').onclick = () => go('/register');
+  setTimeout(() => $('#accid').focus(), 20);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && acc) cfSchedule(300); });
 
 /* ---- per-person cloud sync (claude.ai artifact: db + user). Falls back to this browser only. ---- */
 let syncRef = null, syncOn = false, pushTimer = null, pushing = false, pushAgain = false, lastPushT = 0;
-function setSync(state){
+function setSync(state, msg){
   const el = document.getElementById('sync'); if (!el) return;
   const m = {
     local: ['Lưu trên máy này', 'Tiến độ chỉ lưu trong trình duyệt này.'],
     connecting: ['Đang kết nối…', 'Đang tải tiến độ của bạn.'],
     slow: ['Chưa kết nối được', 'Chưa tải được tiến độ đã lưu; kết quả mới vẫn được giữ trên máy này.'],
     synced: ['☁ Đã đồng bộ', 'Tiến độ lưu theo tài khoản của bạn, mở trên máy khác vẫn còn.'],
+    login: ['👤 Đăng nhập', 'Đăng nhập để đồng bộ tiến độ giữa máy tính và điện thoại.'],
+    err: ['⚠ Chưa đồng bộ', 'Chưa gửi được lên máy chủ; kết quả vẫn lưu trên máy này và sẽ gửi lại sau.'],
   }[state];
-  el.textContent = m[0]; el.title = m[1]; el.dataset.state = state;
+  el.textContent = (state === 'synced' && acc ? '☁ ' + acc.id : m[0]); el.title = msg || m[1]; el.dataset.state = state;
 }
 function snapshotState(){ return {res: st.res, flags: st.flags, lesson: st.lesson, t: Date.now(), v: 1}; }
 function schedulePush(){
+  if (acc) return cfSchedule();
   if (!syncOn) return;
   clearTimeout(pushTimer); pushTimer = setTimeout(pushNow, 1200);
 }
@@ -436,7 +559,11 @@ function refreshView(){
   if (S && $('#q')) render(); else if ($('#lessons')) showHome();
 }
 async function initSync(){
-  if (!window.claude || typeof window.claude.use !== 'function') { setSync('local'); return; }
+  if (!window.claude || typeof window.claude.use !== 'function') {
+    $('#sync').onclick = openAccount;
+    if (acc) cfSync(); else setSync('login');
+    return;
+  }
   setSync('connecting');
   let user, db;
   try { [user, db] = await Promise.all([claude.use('user'), claude.use('db')]); } catch (e) {}
