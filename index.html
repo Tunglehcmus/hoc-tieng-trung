@@ -203,6 +203,14 @@ textarea:focus{outline:none;border-color:var(--accent);background:var(--paper)}
 .xp .lb{margin-top:10px}.xp .lb:first-child{margin-top:0}
 .xp .zh,.xp b.zh{font-family:var(--zh);font-size:18px;font-weight:600}
 .stem .py{font:700 15px var(--ui);color:var(--muted);margin-left:6px}
+.rpsg{border:1px solid var(--line);border-radius:18px;background:var(--paper);padding:12px 14px;margin-bottom:12px}
+.rpsg .t{display:flex;gap:8px;align-items:baseline;margin-bottom:8px}
+.rpsg .t .tg{font:800 11px var(--ui);color:var(--cc,var(--muted));text-transform:uppercase;letter-spacing:.06em}
+.rpsg .t .zh{font-family:var(--zh);font-size:19px;font-weight:700}
+.rpsg .cl{display:flex;flex-wrap:wrap;gap:8px}
+.rpsg .cl .btn{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:150px}
+.rpsg .cl .btn small{font-weight:600;color:var(--muted)}
+.rpsg .cl .btn.done{border-color:var(--ok)}
 .psg{margin:4px 0 14px;border:1px solid var(--line);border-radius:16px;background:var(--tt,var(--bg))}
 .psg summary{cursor:pointer;padding:10px 14px;font-weight:800;list-style:none;display:flex;gap:8px;align-items:center}
 .psg summary::-webkit-details-marker{display:none}
@@ -645,6 +653,29 @@ const examNums = id => [...new Set(ITEMS.filter(o => o.set === id).map(o => o.ex
 const cnNum = k => k <= 10 ? '一二三四五六七八九十'[k-1] : k < 20 ? '十' + (k % 10 ? '一二三四五六七八九'[k%10-1] : '') : '一二三四五六七八九'[Math.floor(k/10)-1] + '十' + (k % 10 ? '一二三四五六七八九'[k%10-1] : '');
 // a set may name some groups itself (dich 7 = BT DỊCH (CÔ HƯƠNG)) instead of 第N课
 // card of a supplementary / reading set on the home page
+// 阅读 set: one lesson = its passages, each split into groups of one question kind
+const KIND_LB = {choice: 'Chọn đáp án (ABCD)', tf: 'Đúng / Sai (√ ×)', fill: 'Điền từ', open: 'Trả lời câu hỏi', order: 'Sắp xếp thứ tự'};
+const KIND_ICON = {choice: '🔤', tf: '✔︎', fill: '✏️', open: '💬', order: '🔢'};
+function showReadLesson(k){
+  S = null;
+  const id = 'read', x = setInfo(id), all = ITEMS.filter(o => o.set === id && o.exam === k);
+  const pids = [...new Set(all.map(o => o.pid))];
+  const groups = pids.map(pid => {
+    const p = x.passages[pid], qs = all.filter(o => o.pid === pid);
+    const kinds = [...new Set(qs.map(o => o.kind))];
+    return `<div class="rpsg"><div class="t"><span class="tg">阅读${p.n}</span><span class="zh">${esc(p.title)}</span></div><div class="cl">${kinds.map(kd => {
+      const l = qs.filter(o => o.kind === kd), s = stats(l);
+      return `<button class="btn ${s.done === s.total ? 'done' : ''}" data-pid="${esc(pid)}" data-kind="${kd}"><span>${KIND_ICON[kd] || ''} ${KIND_LB[kd] || kd}</span><small>${s.total} câu · đã làm ${s.done}${s.done ? ` · đúng ${s.ok}` : ''}</small></button>`; }).join('')}</div></div>`;
+  }).join('');
+  app.innerHTML = `<div class="toolbar"><span class="title" style="${catVars(setVar(id))}"><span class="ico" aria-hidden="true">${SET_ICON[id]}</span><span class="zh">${examName(id, k)}</span>${x.zh}</span><button class="btn" id="back">← Chọn bài</button></div>
+    <p class="hint" style="margin-top:0">Mỗi bài đọc chia thành các cụm theo dạng câu hỏi. Bấm một cụm để làm; bài đọc luôn hiện phía trên câu hỏi.</p>
+    <div style="${catVars(setVar(id))}">${groups}</div>
+    <div class="row" style="margin-top:12px"><button class="btn primary" id="alll">Làm cả bài (${all.length} câu)</button></div>`;
+  $('#back').onclick = () => showExams(id);
+  $('#alll').onclick = () => startSession({set: id, exam: k});
+  app.querySelectorAll('[data-kind]').forEach(b => b.onclick = () => startSession({set: id, exam: k, pid: b.dataset.pid, kind: b.dataset.kind}));
+  window.scrollTo(0, 0);
+}
 function setCard(x){
   const list = ITEMS.filter(o => o.set === x.id); const s = stats(list); const v = setVar(x.id);
   return `<button class="card" data-set="${x.id}" style="${catVars(v)}">
@@ -835,7 +866,7 @@ function showExams(id = 'hsk'){
         <span class="meta"><span>${s.done}/${s.total} câu</span>${s.done ? `<span>Đúng ${s.ok}</span>` : ''}</span></button>`; }).join('')}</div>
     <div class="row" style="margin-top:16px"><button class="btn primary" id="allexams">Làm cả ${N} ${byLesson(id) ? 'bài' : 'đề'} (${ITEMS.filter(o => o.set === id).length} câu)</button>${id === 'jc3' ? `<button class="btn" data-part="xc">Chỉ 选词填空 (${ITEMS.filter(o => o.set === id && o.part === 'xc').length} câu)</button><button class="btn" data-part="gc">Chỉ 改错句 (${ITEMS.filter(o => o.set === id && o.part === 'gc').length} câu)</button>` : ''}</div>`;
   $('#back').onclick = showHome;
-  app.querySelectorAll('[data-exam]').forEach(b => b.onclick = () => startSession({set: id, exam: +b.dataset.exam}));
+  app.querySelectorAll('[data-exam]').forEach(b => b.onclick = () => id === 'read' ? showReadLesson(+b.dataset.exam) : startSession({set: id, exam: +b.dataset.exam}));
   $('#allexams').onclick = () => startSession({set: id});
   app.querySelectorAll('[data-part]').forEach(b => b.onclick = () => startSession({set: id, part: b.dataset.part}));
   window.scrollTo(0, 0);
@@ -1000,7 +1031,7 @@ function showFlags(){
 let S = null;
 function startSession(opt){
   let list = opt.review ? ITEMS.filter(o => inLesson(o) && st.res[o.key] && !st.res[o.key].ok)
-           : opt.set ? ITEMS.filter(o => o.set === opt.set && (!opt.exam || o.exam === opt.exam) && (!opt.part || o.part === opt.part))
+           : opt.set ? ITEMS.filter(o => o.set === opt.set && (!opt.exam || o.exam === opt.exam) && (!opt.part || o.part === opt.part) && (!opt.pid || o.pid === opt.pid) && (!opt.kind || o.kind === opt.kind))
            : ITEMS.filter(o => o.cat === opt.cat && inLesson(o));
   S = {opt, base: list, list: [...list], i: 0, shuffle: false, onlyNew: false};
   const firstUndone = S.list.findIndex(o => !st.res[o.key]);
@@ -1022,7 +1053,7 @@ function render(){
       <span class="title" style="${S.opt.review || S.opt.search != null ? '' : catVars(S.opt.set ? setVar(S.opt.set) : S.opt.cat)}"><span class="ico" aria-hidden="true">${S.opt.search != null ? '搜' : S.opt.review ? '复' : S.opt.set ? SET_ICON[S.opt.set] : CAT_ICON[S.opt.cat]}</span><span class="zh">${cat.zh}</span>${cat.vi}${st.lesson!=='all' && !S.opt.set ?` · ${lessonName(st.lesson)}`:''}</span>
       <label class="tog"><input type="checkbox" id="shuf" ${S.shuffle?'checked':''}> Trộn câu</label>
       <label class="tog"><input type="checkbox" id="onlynew" ${S.onlyNew?'checked':''}> Bỏ câu đã đúng</label>
-      <button class="btn" id="back">${S.opt.search != null ? '← Kết quả tìm' : S.opt.set && setInfo(S.opt.set).exams ? '← Chọn đề' : '← Dạng bài'}</button>
+      <button class="btn" id="back">${S.opt.search != null ? '← Kết quả tìm' : S.opt.set === 'read' && S.opt.exam ? '← Chọn cụm' : S.opt.set && setInfo(S.opt.set).exams ? '← Chọn đề' : '← Dạng bài'}</button>
     </div>
     ${S.opt.set === 'dapei' && !S.shuffle ? '<div class="tipnote">ĐỀ XUẤT CHỌN TÍNH NĂNG TRỘN CÂU ĐỂ LUYỆN TẬP HIỆU QUẢ HƠN</div>' : ''}
     ${o ? `<div class="qcard" id="q"></div>
@@ -1033,7 +1064,7 @@ function render(){
     </div>
     <div class="dots">${S.list.map((x,k) => { const r = st.res[x.key]; return `<button class="dot ${r?(r.ok?'ok':'bad'):''} ${k===S.i?'cur':''}" data-k="${k}">${k+1}</button>` }).join('')}</div>`
     : `<div class="empty">${panda('cheer')}Không còn câu nào trong mục này. 太棒了！</div>`}`;
-  $('#back').onclick = S.opt.search != null ? () => showSearch(S.opt.search) : S.opt.set && setInfo(S.opt.set).exams ? () => showExams(S.opt.set) : showHome;
+  $('#back').onclick = S.opt.search != null ? () => showSearch(S.opt.search) : S.opt.set === 'read' && S.opt.exam ? () => showReadLesson(S.opt.exam) : S.opt.set && setInfo(S.opt.set).exams ? () => showExams(S.opt.set) : showHome;
   $('#shuf').onchange = e => { S.shuffle = e.target.checked; applyFilters(); };
   $('#onlynew').onchange = e => { S.onlyNew = e.target.checked; applyFilters(); };
   if (!o) return;
@@ -1046,7 +1077,7 @@ function render(){
 function go(d){ S.i = Math.max(0, Math.min(S.list.length-1, S.i+d)); render(); window.scrollTo({top:0}); }
 
 function metaLine(o){
-  const head = o.set === 'read' ? `<span class="tag">阅读教程 II · ${examName(o.set, o.exam)}</span><span class="tag">阅读${(passageOf(o) || {}).n || ''}</span><span>Câu (${o.num})</span>`
+  const head = o.set === 'read' ? `<span class="tag">阅读教程 II · ${examName(o.set, o.exam)}</span><span class="tag">阅读${(passageOf(o) || {}).n || ''} · ${KIND_LB[o.kind] || ''}</span><span>Câu (${o.num})</span>`
     : o.set === 'jc3' ? `<span class="tag">汉语教程3下 · ${examName(o.set, o.exam)}</span><span class="tag">${o.part === 'gc' ? '改错句 · Sửa câu sai' : '选词填空' + (o.sec ? ' ' + o.sec : '') + ' · Chọn từ điền'}</span><span>Câu (${o.num})</span>`
     : o.set === 'dapei' ? `<span class="tag">桥梁1 · ${examName(o.set, o.exam)}</span><span class="tag">词语搭配 · <span style="font-family:var(--zh)">${esc(o.word)}</span></span><span>Câu ${o.num}</span>`
     : o.set === 'dich' ? `<span class="tag">${groupName(o.set, o.exam) ? esc(groupName(o.set, o.exam)) : '桥梁1 · ' + examName(o.set, o.exam)}</span><span class="tag">越汉翻译 · Dịch Việt → Trung</span><span>Câu ${o.num}</span>`
