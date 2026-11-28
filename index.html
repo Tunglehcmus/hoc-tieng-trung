@@ -368,15 +368,20 @@ mark{background:var(--gold-soft);color:inherit;border-radius:4px;padding:0 2px;b
   #lockbtn .lbl{display:none}
   .sync[data-state="local"]{display:none}
   .top .stats{display:none}
-  .hero{grid-template-columns:1fr 1fr;grid-template-areas:"m r" "b b";padding:14px;gap:10px 12px}
-  .hero .mascot{grid-area:m;width:82px}
+  .hero{grid-template-columns:auto 1fr auto;grid-template-areas:"m b r";margin-top:12px;padding:8px 10px;gap:8px;border-radius:18px}
+  .hero .mascot{grid-area:m;width:48px}
+  .hero .mascot .tap{font-size:13px;right:-4px;bottom:0}
   .toolbar .title .zh{display:none}
   .tile{font-size:19px;padding:6px 11px}
-  .lockbar .zhf{display:none} .lockbar .txt{font-size:14px} .lockbar{border-radius:22px}
-  .hero .ring{grid-area:r;justify-self:end;width:84px;height:84px}
-  .hero .ring .lbl b{font-size:18px}
-  .hero .bubble{grid-area:b}
-  .hero .bubble::before{left:34px;top:-9px;border:9px solid transparent;border-bottom-color:var(--accent-soft);border-top:0}
+  .lockbar .zhf{display:none} .lockbar .txt{font-size:13px;line-height:1.3} .lockbar{margin-top:12px;gap:8px;padding:4px 5px 4px 8px;width:100%}
+  .lockbar .mascot{width:34px} .lockbar .btn{margin-left:auto;padding:6px 12px;font-size:13px}
+  .hero .ring{grid-area:r;justify-self:end;width:58px;height:58px}
+  .hero .ring .lbl b{font-size:14px} .hero .ring .lbl span{font-size:8.5px}
+  .hero .bubble{grid-area:b;padding:6px 10px;border-radius:12px}
+  .hero .bubble::before{display:none}
+  .hero .hi{font-size:15px} .hero .say{font-size:12.5px;line-height:1.4}
+  .hero .row{margin-top:6px} .hero .row .btn{padding:5px 12px;font-size:12.5px}
+  .searchbox{margin-top:10px}
   .stem{font-size:21px}.opts{grid-template-columns:1fr}.qcard{padding:16px;border-radius:20px}
   .card .zh{font-size:21px}
   .htab{min-width:0;padding:6px 10px;border-radius:14px}
@@ -840,7 +845,7 @@ function showHome(){
   const wrongAll = ITEMS.filter(o => inLesson(o) && st.res[o.key] && !st.res[o.key].ok);
   const SETS = DATA.sets || [], setItems = l => ITEMS.filter(o => l.some(x => x.id === o.set));
   const tabs = [
-    {id: 'gp', zh: '语法', vi: 'Ngữ pháp', n: CATS.filter(c => ITEMS.some(o => o.cat === c.id)).length, s: stats(ITEMS.filter(o => !o.set))},
+    {id: 'gp', zh: '练习', vi: 'Ngữ pháp', n: CATS.filter(c => ITEMS.some(o => o.cat === c.id)).length, s: stats(ITEMS.filter(o => !o.set))},
     ...[['add', '加练', 'Bổ sung', x => !x.group], ['order', '整理句子', 'Sắp xếp câu', x => x.group === 'order'], ['read', '阅读', 'Đọc hiểu', x => x.group === 'read']]
       .map(([id, zh, vi, f]) => { const sets = SETS.filter(f); return {id, zh, vi, sets, n: sets.length, s: stats(setItems(sets))}; })
   ].filter(t => t.n);
