@@ -138,6 +138,23 @@ h2.h-book .bk small{font-size:12px;font-weight:600;color:var(--muted);margin-lef
 .card .desc{grid-column:1 / -1;color:var(--muted);font-size:13px;margin-top:6px}
 .card .bar{grid-column:1 / -1;margin-top:8px}
 .card .meta{grid-column:1 / -1}
+.htabs{position:sticky;top:calc(env(safe-area-inset-top, 0px) + 60px);z-index:4;display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:18px -4px 4px;padding:8px 4px;background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(8px)}
+.htabs::-webkit-scrollbar{display:none}
+.htab{flex:1 0 auto;min-width:118px;display:grid;justify-items:start;gap:0;text-align:left;border:1.5px solid var(--line);background:var(--paper);border-radius:16px;padding:7px 14px;transition:border-color .15s}
+.htab:hover{border-color:var(--accent)}
+.htab .zh{font-family:var(--head);font-weight:700;font-size:18px;line-height:1.25;color:var(--accent-2)}
+.htab .vi{font-size:12px;font-weight:800}
+.htab small{font-size:11px;font-weight:700;color:var(--muted)}
+.htab[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.htab[aria-selected="true"] .zh,.htab[aria-selected="true"] small{color:var(--on-accent)}
+.grid.cmp{grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-top:14px}
+.grid.cmp .card{padding:12px 14px;border-radius:18px;gap:2px 12px}
+.grid.cmp .card .ico{width:42px;height:42px;border-radius:14px;font-size:23px}
+.grid.cmp .card .zh{font-size:17px;padding-right:18px}
+.grid.cmp .card .vi{font-size:13px}
+.grid.cmp .card .bar{margin-top:8px;height:6px}
+.grid.cmp .card .meta{font-size:11.5px;gap:8px}
+.grid.cmp .card .done-badge{top:8px;right:10px;font-size:15px}
 .card .done-badge{position:absolute;top:12px;right:14px;font-size:12px;font-weight:800;color:var(--cc)}
 .bar{height:8px;background:var(--chip);border-radius:9px;overflow:hidden;display:flex}
 .bar i{display:block;height:100%}
@@ -362,6 +379,15 @@ mark{background:var(--gold-soft);color:inherit;border-radius:4px;padding:0 2px;b
   .hero .bubble::before{left:34px;top:-9px;border:9px solid transparent;border-bottom-color:var(--accent-soft);border-top:0}
   .stem{font-size:21px}.opts{grid-template-columns:1fr}.qcard{padding:16px;border-radius:20px}
   .card .zh{font-size:21px}
+  .htab{min-width:0;padding:6px 10px;border-radius:14px}
+  .htab .zh{font-size:16px}
+  .htab .vi{display:none}
+  .grid.cmp{grid-template-columns:1fr 1fr;gap:10px}
+  .grid.cmp .card{padding:10px 11px;grid-template-columns:auto 1fr;gap:2px 8px}
+  .grid.cmp .card .ico{grid-row:auto;width:32px;height:32px;border-radius:10px;font-size:18px}
+  .grid.cmp .card .zh{font-size:15px;align-self:center}
+  .grid.cmp .card .vi{grid-column:1 / -1;font-size:12px;line-height:1.35}
+  .grid.cmp .card .meta span:nth-child(2){display:none}
 }
 </style>
 </head>
@@ -687,10 +713,9 @@ function showReadLesson(k, id = 'read'){
 }
 function setCard(x){
   const list = ITEMS.filter(o => o.set === x.id); const s = stats(list); const v = setVar(x.id);
-  return `<button class="card" data-set="${x.id}" style="${catVars(v)}">
+  return `<button class="card" data-set="${x.id}" style="${catVars(v)}" title="${esc(x.desc || '')}">
     <span class="ico" aria-hidden="true">${SET_ICON[x.id] || '练'}</span><span class="zh">${x.zh}</span><span class="vi">${x.vi}</span>
-    ${s.done === s.total ? '<span class="done-badge">🎋 Xong!</span>' : ''}
-    <span class="desc">${x.desc}</span>
+    ${s.done === s.total ? '<span class="done-badge" title="Đã làm xong">🎋</span>' : ''}
     <span class="bar"><i class="ok" style="width:${s.ok/s.total*100}%"></i><i class="bad" style="width:${s.bad/s.total*100}%"></i></span>
     <span class="meta"><span>${s.total} câu${x.exams ? ` · ${examNums(x.id).length} ${byLesson(x.id) ? 'bài' : 'đề'}` : ''}</span><span>Đã làm ${s.done}</span>${s.done?`<span>Đúng ${Math.round(s.ok/s.done*100)}%</span>`:''}</span>
   </button>`;
@@ -813,32 +838,35 @@ function showHome(){
   topStats();
   const lessonsUsed = [...new Set(ITEMS.filter(o => !o.set).map(o => o.lesson))].sort((a,b) => a-b);
   const wrongAll = ITEMS.filter(o => inLesson(o) && st.res[o.key] && !st.res[o.key].ok);
+  const SETS = DATA.sets || [], setItems = l => ITEMS.filter(o => l.some(x => x.id === o.set));
+  const tabs = [
+    {id: 'gp', zh: '语法', vi: 'Ngữ pháp', n: CATS.filter(c => ITEMS.some(o => o.cat === c.id)).length, s: stats(ITEMS.filter(o => !o.set))},
+    ...[['add', '加练', 'Bổ sung', x => !x.group], ['order', '整理句子', 'Sắp xếp câu', x => x.group === 'order'], ['read', '阅读', 'Đọc hiểu', x => x.group === 'read']]
+      .map(([id, zh, vi, f]) => { const sets = SETS.filter(f); return {id, zh, vi, sets, n: sets.length, s: stats(setItems(sets))}; })
+  ].filter(t => t.n);
+  let tab = 'gp'; try { tab = localStorage.getItem('yx-htab') || 'gp'; } catch(e){}
+  if (!tabs.some(t => t.id === tab)) tab = 'gp';
   app.innerHTML = `
     ${heroHtml(wrongAll.length)}
     <form class="searchbox" id="homesearch" role="search"><input id="hq" type="search" autocomplete="off" placeholder="Tìm câu hỏi theo từ khoá, vd: 把, 了, 比较, 北京…" aria-label="Tìm câu hỏi"><kbd>/</kbd></form>
-    <h2><span class="zh">选课</span> Chọn bài</h2>
+    <nav class="htabs" id="htabs" role="tablist" aria-label="Nhóm bài tập">${tabs.map(t => { const p = t.s.total ? Math.round(t.s.done / t.s.total * 100) : 0;
+      return `<button class="htab" role="tab" data-tab="${t.id}" aria-selected="${t.id === tab}"><span class="zh">${t.zh}</span><span class="vi">${t.vi}</span><small>${t.n} mục${t.s.done ? ` · ${p}%` : ''}</small></button>`; }).join('')}</nav>
+    ${tab === 'gp' ? `<h2 class="h-book"><span class="zh">练习</span><span>Bài tập thuộc giáo trình</span><span class="bk">《现代汉语实用语法分析》<small>(第二版·上册)</small></span></h2>
     <div class="chips" id="lessons">
       <button class="chip" data-l="all" aria-pressed="${st.lesson==='all'}">Tất cả</button>
       ${lessonsUsed.map(n => `<button class="chip" data-l="${n}" aria-pressed="${String(st.lesson)===String(n)}" title="${esc(LESSONS[n])}">${lessonName(n)}</button>`).join('')}
     </div>
     ${st.lesson !== 'all' ? `<p class="lessonname">📖 ${esc(LESSONS[st.lesson])}</p>` : ''}
-    <h2 class="h-book"><span class="zh">练习</span><span>Bài tập thuộc giáo trình</span><span class="bk">《现代汉语实用语法分析》<small>(第二版·上册)</small></span></h2>
-    <div class="grid">${CATS.map(c => {
+    <div class="grid cmp">${CATS.map(c => {
       const list = ITEMS.filter(o => o.cat === c.id && inLesson(o)); const s = stats(list);
       if (!list.length) return '';
-      return `<button class="card" data-cat="${c.id}" style="${catVars(c.id)}">
+      return `<button class="card" data-cat="${c.id}" style="${catVars(c.id)}" title="${esc(c.desc)}">
         <span class="ico" aria-hidden="true">${CAT_ICON[c.id]}</span><span class="zh">${c.zh}</span><span class="vi">${c.vi}</span>
-        ${s.done === s.total ? '<span class="done-badge">🎋 Xong!</span>' : ''}
-        <span class="desc">${c.desc}</span>
+        ${s.done === s.total ? '<span class="done-badge" title="Đã làm xong">🎋</span>' : ''}
         <span class="bar"><i class="ok" style="width:${s.ok/s.total*100}%"></i><i class="bad" style="width:${s.bad/s.total*100}%"></i></span>
         <span class="meta"><span>${s.total} câu</span><span>Đã làm ${s.done}</span>${s.done?`<span>Đúng ${Math.round(s.ok/s.done*100)}%</span>`:''}</span>
-      </button>`}).join('')}</div>
-    <h2><span class="zh">加练</span> Bài tập bổ sung</h2>
-    <div class="grid">${(DATA.sets || []).filter(x => !x.group).map(setCard).join('')}</div>
-    ${(DATA.sets || []).some(x => x.group === 'order') ? `<h2><span class="zh">整理句子</span> Sắp xếp thành câu</h2>
-    <div class="grid">${(DATA.sets || []).filter(x => x.group === 'order').map(setCard).join('')}</div>` : ''}
-    ${(DATA.sets || []).some(x => x.group === 'read') ? `<h2><span class="zh">阅读</span> Bài tập đọc hiểu</h2>
-    <div class="grid">${(DATA.sets || []).filter(x => x.group === 'read').map(setCard).join('')}</div>` : ''}
+      </button>`}).join('')}</div>`
+    : `<div class="grid cmp">${(tabs.find(t => t.id === tab) || {sets: []}).sets.map(setCard).join('')}</div>`}
     <div class="row" style="margin-top:18px">
       <button class="btn" id="review" ${wrongAll.length ? '' : 'disabled'}>Ôn lại câu làm sai (${wrongAll.length})</button>
       <button class="btn" id="flags">Câu đã đánh dấu lỗi (${Object.keys(st.flags).length})</button>
@@ -847,6 +875,7 @@ function showHome(){
     <p class="foot">Nguồn: 《现代汉语实用语法分析》(第二版·上册), 朱庆明 编著 — dữ liệu chuyển từ bản scan bằng OCR nên có thể còn sót lỗi chữ.
       Gặp câu sai đề, bấm <b>⚑ Báo lỗi</b> để đánh dấu, rồi xem lại theo số trang sách.<br>
       Phím tắt: <kbd>A</kbd>–<kbd>D</kbd> chọn đáp án · <kbd>1</kbd>–<kbd>9</kbd> chọn từ, <kbd>⌫</kbd> bỏ từ cuối (bài sắp xếp) · <kbd>Enter</kbd> kiểm tra / câu tiếp · <kbd>←</kbd> <kbd>→</kbd> chuyển câu.</p>`;
+  app.querySelectorAll('#htabs .htab').forEach(b => b.onclick = () => { try { localStorage.setItem('yx-htab', b.dataset.tab); } catch(e){} const y = window.scrollY; showHome(); window.scrollTo(0, y); });
   app.querySelectorAll('#lessons .chip').forEach(b => b.onclick = () => { st.lesson = b.dataset.l; save(); showHome(); });
   app.querySelectorAll('.card[data-cat]').forEach(b => b.onclick = () => startSession({cat: b.dataset.cat}));
   app.querySelectorAll('.card[data-set]').forEach(b => b.onclick = () => setInfo(b.dataset.set).exams ? showExams(b.dataset.set) : startSession({set: b.dataset.set}));
