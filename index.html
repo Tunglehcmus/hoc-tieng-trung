@@ -845,8 +845,8 @@ function showHome(){
   const wrongAll = ITEMS.filter(o => inLesson(o) && st.res[o.key] && !st.res[o.key].ok);
   const SETS = DATA.sets || [], setItems = l => ITEMS.filter(o => l.some(x => x.id === o.set));
   const tabs = [
-    {id: 'gp', zh: '练习', vi: 'Ngữ pháp', n: CATS.filter(c => ITEMS.some(o => o.cat === c.id)).length, s: stats(ITEMS.filter(o => !o.set))},
-    ...[['add', '加练', 'Bổ sung', x => !x.group], ['order', '整理句子', 'Sắp xếp câu', x => x.group === 'order'], ['read', '阅读', 'Đọc hiểu', x => x.group === 'read']]
+    {id: 'gp', zh: '练习', vi: 'Luyện tập', n: CATS.filter(c => ITEMS.some(o => o.cat === c.id)).length, s: stats(ITEMS.filter(o => !o.set))},
+    ...[['add', '复习', 'Ôn tập', x => !x.group], ['order', '整理句子', 'Sắp xếp câu', x => x.group === 'order'], ['read', '阅读', 'Đọc hiểu', x => x.group === 'read']]
       .map(([id, zh, vi, f]) => { const sets = SETS.filter(f); return {id, zh, vi, sets, n: sets.length, s: stats(setItems(sets))}; })
   ].filter(t => t.n);
   let tab = 'gp'; try { tab = localStorage.getItem('yx-htab') || 'gp'; } catch(e){}
