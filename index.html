@@ -758,7 +758,7 @@ const TIPS = [
   ['吃水果', 'Ăn trái cây nào', 'Một quả 苹果 (píngguǒ) mỗi ngày, bác sĩ đứng xa — mà từ mới thì đứng gần!'],
   ['别着急', 'Đừng vội', '“把” với “被” ai mới học cũng rối. Rối thì uống ngụm trà, đọc lại phần phân tích là thông.'],
   ['深呼吸', 'Hít thở sâu', 'Hít vào 4 giây, giữ 4 giây, thở ra 4 giây. Bình tĩnh thì mới thấy chỗ đặt “的” đúng.'],
-  ['学而时习之', 'Học rồi ôn', 'Khổng Tử dặn: học rồi phải ôn. Vào mục “Ôn lại câu sai” làm lại vài câu đi, Khổng Tử khen đấy.'],
+  ['学而时习之', 'Học rồi ôn', 'Khổng Tử dặn: học rồi phải ôn. Vào mục “Làm lại câu sai” làm lại vài câu đi, Khổng Tử khen đấy.'],
   ['动一动', 'Vận động chút', 'Đi bộ quanh nhà 5 phút rồi quay lại. Máu lên não đều, ngữ pháp tự nhiên “thông”.'],
   ['你真棒！', 'Bạn giỏi lắm!', 'Mở web ra học đã là thắng bản thân lúc lười rồi. Gấu tặng bạn một cái ôm lông xù!'],
   ['少喝奶茶', 'Bớt trà sữa xíu', 'Trà sữa ngon nhưng nhiều đường dễ buồn ngủ. Đổi sang 绿茶 (lǜchá) vừa tỉnh vừa đúng chất Trung Hoa.'],
@@ -873,7 +873,7 @@ function showHome(){
       </button>`}).join('')}</div>`
     : `<div class="grid cmp">${(tabs.find(t => t.id === tab) || {sets: []}).sets.map(setCard).join('')}</div>`}
     <div class="row" style="margin-top:18px">
-      <button class="btn" id="review" ${wrongAll.length ? '' : 'disabled'}>Ôn lại câu làm sai (${wrongAll.length})</button>
+      <button class="btn" id="review" ${wrongAll.length ? '' : 'disabled'}>Làm lại câu sai (${wrongAll.length})</button>
       <button class="btn" id="flags">Câu đã đánh dấu lỗi (${Object.keys(st.flags).length})</button>
       <button class="btn" id="reset" style="margin-left:auto">Xoá tiến độ</button>
     </div>
@@ -1091,11 +1091,11 @@ function applyFilters(){
 
 function render(){
   topStats();
-  const cat = S.opt.search != null ? {zh:'搜索', vi:`Kết quả tìm «${esc(S.opt.search)}»`} : S.opt.review ? {zh:'复习', vi:'Ôn lại câu sai'} : S.opt.set ? Object.assign({}, setInfo(S.opt.set), S.opt.exam ? {vi: setInfo(S.opt.set).vi + ' · ' + examVi(S.opt.set, S.opt.exam)} : {}) : CATS.find(c => c.id === S.opt.cat);
+  const cat = S.opt.search != null ? {zh:'搜索', vi:`Kết quả tìm «${esc(S.opt.search)}»`} : S.opt.review ? {zh:'重做', vi:'Làm lại câu sai'} : S.opt.set ? Object.assign({}, setInfo(S.opt.set), S.opt.exam ? {vi: setInfo(S.opt.set).vi + ' · ' + examVi(S.opt.set, S.opt.exam)} : {}) : CATS.find(c => c.id === S.opt.cat);
   const o = S.list[S.i];
   app.innerHTML = `
     <div class="toolbar">
-      <span class="title" style="${S.opt.review || S.opt.search != null ? '' : catVars(S.opt.set ? setVar(S.opt.set) : S.opt.cat)}"><span class="ico" aria-hidden="true">${S.opt.search != null ? '搜' : S.opt.review ? '复' : S.opt.set ? SET_ICON[S.opt.set] : CAT_ICON[S.opt.cat]}</span><span class="zh">${cat.zh}</span>${cat.vi}${st.lesson!=='all' && !S.opt.set ?` · ${lessonName(st.lesson)}`:''}</span>
+      <span class="title" style="${S.opt.review || S.opt.search != null ? '' : catVars(S.opt.set ? setVar(S.opt.set) : S.opt.cat)}"><span class="ico" aria-hidden="true">${S.opt.search != null ? '搜' : S.opt.review ? '重' : S.opt.set ? SET_ICON[S.opt.set] : CAT_ICON[S.opt.cat]}</span><span class="zh">${cat.zh}</span>${cat.vi}${st.lesson!=='all' && !S.opt.set ?` · ${lessonName(st.lesson)}`:''}</span>
       <label class="tog"><input type="checkbox" id="shuf" ${S.shuffle?'checked':''}> Trộn câu</label>
       <label class="tog"><input type="checkbox" id="onlynew" ${S.onlyNew?'checked':''}> Bỏ câu đã đúng</label>
       <button class="btn" id="back">${S.opt.search != null ? '← Kết quả tìm' : isRead(S.opt.set) && S.opt.exam ? '← Chọn cụm' : S.opt.set && setInfo(S.opt.set).exams ? '← Chọn đề' : '← Dạng bài'}</button>
